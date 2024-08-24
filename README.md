@@ -1,0 +1,1 @@
+This repository includes the data and code used to produce the analysis in the paper "Race, Rates, and Energy Insecurity: Examining Racial Disparities In Electricity Costs And Consumption at the Utility-Scale"
