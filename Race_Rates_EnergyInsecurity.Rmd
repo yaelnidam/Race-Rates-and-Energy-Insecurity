@@ -1,0 +1,1146 @@
+---
+title: "Electric Utilities | Rates"
+author: "Yael Nidam"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r libraries, message=FALSE, warning=FALSE, include=FALSE}
+.libPaths("C:/Program Files/R/R-4.3.0/library" ) 
+.libPaths() 
+
+
+library("sf")
+library("terra")
+library("spData")
+library("leaflet")
+library("tmap")
+library("pander")
+library("knitr")
+library("ggpubr")
+library("pwr")
+library("effectsize")
+library("ggplot2")
+library("gridExtra")
+library("stringr")
+library("ggpubr")
+library("Hmisc")    
+library("gridExtra")    
+library("here")    
+library("tidyverse")   
+library("grid")
+library("lemon")
+
+# ggplot2::theme_set(theme_pubr())
+
+#Define plot functions for words docs and html
+doc_type = "doc" #Choose export type: "html" or "doc"
+
+plot_fun= function(x,doc_type){ #dataset, document type(either word doc or html)
+  if (doc_type=="doc"){pander(x)} #if we want to export to word, use pander
+  else if (doc_type=="html"){kable(x)}}#if we want to export to html, use kable
+
+# set pander table-layout options
+pander::panderOptions('table.alignment.default', function(df)
+    ifelse(sapply(df, is.numeric), 'right', 'left'))
+pander::panderOptions('table.split.table', Inf)
+pander::panderOptions('big.mark', ",")
+pander::panderOptions('keep.trailing.zeros', TRUE)
+
+```
+
+```{r functions, include=FALSE, message=FALSE, warning=FALSE}
+cal_mean = function(dat,service,service_label,select_test,dat_cat){
+            B1 = dat%>%filter(BIPOC50=="% BIPOC>50")%>%pull(service)
+            B2 = dat%>%filter(BIPOC50=="% BIPOC<50")%>%pull(service)
+            t_test = t.test(B1,B2)
+            Mann_Whitney_Wilcoxon_test = wilcox.test( eval(as.symbol(service)) ~ BIPOC50, data=dat)
+           
+            d = ( mean(B1)- mean(B2) )/ sd_pooled(B1,B2)
+            p=pwr.t2n.test(n1 = as.numeric(dat_cat[1,2]), n2= as.numeric(dat_cat[2,2]), d = d)
+            
+            t = data.frame(
+              Utility_Service = service_label
+              ,BIPOC_Majority = round(mean(B1),2)
+              ,White_Majority = round(mean(B2),2)
+              ,P.value = if_else(select_test == "t.test"
+                            ,round(t_test$p.value,3)
+                            ,round(Mann_Whitney_Wilcoxon_test$p.value),3)
+              ,Power = paste(round(p$power*100,1)," %")
+               )
+            return(t)
+          }
+
+
+#https://livebook.manning.com/book/r-in-action/chapter-10/27
+#d values of 0.2, 0.5, and 0.8 represent small, medium, and large effect sizes respectively.
+#Power is defined as one minus the probability of making a Type II error. Power can be thought of as the probability of finding an effect that is there.
+
+cal_mean_state = function(dat,service,service_label,select_test,dat_cat){
+            B1 = dat%>%filter(BIPOC_cat=="Higher share BIPOC")%>%pull(service)
+            B2 = dat%>%filter(BIPOC_cat=="Lower share BIPOC")%>%pull(service)
+            t_test = t.test(B1,B2)
+            Mann_Whitney_Wilcoxon_test = wilcox.test(eval(as.symbol(service)) ~ BIPOC_cat, data=dat)
+            
+            d = ( mean(B1)- mean(B2) )/ sd_pooled(B1,B2)
+            p=pwr.t2n.test(n1 = as.numeric(dat_cat[1,2]), n2= as.numeric(dat_cat[2,2]), d = d)
+            
+            t = data.frame(
+              Utility_Service = service_label
+              ,BIPOC_higher_share = round(mean(B1),2)
+              ,BIPOC_lower_share = round(mean(B2),2)
+              ,P.value = if_else(select_test == "t.test"
+                            ,round(t_test$p.value,3)
+                            ,round(Mann_Whitney_Wilcoxon_test$p.value),3)
+              ,Power = paste(round(p$power*100,1)," %")
+               )
+            return(t)
+          }
+
+hist_plot = function(dat,v,v_label,bin_n){
+                p=ggplot(dat, aes(x=eval(as.symbol(v)))) + 
+                # Change the width of bins and colors
+                 geom_histogram(
+                                # aes(y=..density..),
+                                binwidth=bin_n,color="black", fill="grey") + 
+                # Add mean line
+                 geom_vline(aes(xintercept=mean(eval(as.symbol(v)))),
+                          color="blue", linetype="dashed", size=1)+
+                 # Histogram with density plot
+                 # geom_density(alpha=.2, fill="#FF6666")+ 
+
+              xlab(v_label) 
+                
+              return(p)
+}
+
+
+timeseries_graph_50 = function(dat,dat_state,v,comp_cat,y_title,title){
+                               p = ggplot(dat%>%filter(BIPOC50=="% BIPOC>50")
+                                         ,aes(x=Year,y=eval(as.symbol(v))))+
+                                    geom_point(size=1) +
+                                    geom_line(aes(color="Majority BIPOC"),size=1)+
+                                    
+                                    geom_line(data=dat%>%filter(BIPOC50=="% BIPOC<50"),aes(color="Majority White"),size=1)+
+                                    
+                                    geom_line(data=dat_state,aes(color="State average"),linetype = "dashed",size=1)+
+                                    labs(color="Legend text")+
+                                    scale_colour_manual(values=c("% BIPOC>50"="#944B00","% BIPOC<50"="#016F94","State average"="Grey")) +
+                                                  labs( y= y_title
+                                                       , x = "Year")+ 
+                                            ggtitle(title)+
+                                            theme(legend.position="bottom")+
+                                            guides(color = guide_legend(title = ""))+
+                                scale_colour_manual(values=c("Majority BIPOC"="#944B00","Majority White"="#016F94","State average"="Grey" ))
+                               return(p)}
+
+IOU_Muni_timeline = function(dat,v,y_title,title){
+                        ggplot(dat, aes(x=Year, y=eval(as.symbol(v)), colour=Type))+
+                                    # geom_point(size=1) +
+                                    geom_point(size=3, aes(shape = Type)) +
+                                    geom_line(size=1)+
+                                    scale_colour_manual(values= c("IOU serving majority White costumers"="#016F94"
+                                                                 ,"POU serving majority White costumers"="#48BAE0"
+                                                                 ,"Cooperative serving majority White costumers"="#9BD4E0"
+                                                                 
+                                                                 ,"IOU serving majority BIPOC costumers"="#944B00"
+                                                                 ,"POU serving majority BIPOC costumers"="#E07E19"
+                                                                 ,"Cooperative serving majority BIPOC costumers"="#BA906C"
+                                                                 )) +
+                                    labs( y= y_title,x = "Year")+
+                                    ggtitle(title)+
+                                    # theme(legend.position="bottom")+
+                                    guides(color = guide_legend(title = ""))
+}
+
+p_value_cat_signal= function(dat,v){
+                      d=dat%>%mutate(
+                        new=case_when(
+                        p.value<=0.001 ~ paste(eval(as.symbol(v)),"***")
+                        ,p.value>0.001 & p.value<=0.01 ~ paste(eval(as.symbol(v)),"**")
+                        ,p.value>0.01 & p.value<=0.05 ~ paste(eval(as.symbol(v)),"*")
+                        ,p.value>0.05 ~ as.character(eval(as.symbol(v)))
+                      ))
+                      
+                      return(d%>%pull(new))
+                    }
+
+proportion_sum = function(dat,variable_name, v1,v2){
+  
+                      p_test = prop.test(
+                      
+                      x=c(sum(dat%>%filter(BIPOC50=="% BIPOC<50")%>%pull(v1))
+                         ,sum(dat%>%filter(BIPOC50=="% BIPOC>50")%>%pull(v1)))
+                      ,n=c(sum(dat%>%filter(BIPOC50=="% BIPOC<50")%>%pull(v2))
+                         ,sum(dat%>%filter(BIPOC50=="% BIPOC>50")%>%pull(v2)))
+                        )
+                    
+                      dem_table = data.frame(
+                        Variable = variable_name 
+                        ,Majority_BIPOC = round(p_test$estimate[[2]]*100,1)
+                        ,Majority_White = round(p_test$estimate[[1]]*100,1)
+                        ,p.value = round(p_test$p.value,3)
+                       )
+                    
+                      # dem_table = dem_table%>%mutate(
+                      #   Majority_BIPOC = p_value_cat_signal(dem_table,"Majority_BIPOC")
+                      #   ,Majority_White = p_value_cat_signal(dem_table,"Majority_White")
+                      #    )
+                    return(dem_table)
+                      }
+
+mean_sum = function(dat,variable_name, v){
+  
+                      p_test = t.test(
+                                 dat%>%filter(BIPOC50=="% BIPOC<50")%>%pull(v)
+                                ,dat%>%filter(BIPOC50=="% BIPOC>50")%>%pull(v)
+                              )
+                    
+                      dem_table = data.frame(
+                        Variable = variable_name 
+                        ,Majority_BIPOC = round(p_test$estimate[[2]],1)
+                        ,Majority_White = round(p_test$estimate[[1]],1)
+                        ,p.value = round(p_test$p.value,3)
+                       )
+                    
+                      # dem_table = dem_table%>%mutate(
+                      #   Majority_BIPOC = p_value_cat_signal(dem_table,"Majority_BIPOC")
+                      #   ,Majority_White = p_value_cat_signal(dem_table,"Majority_White")
+                      #    )
+                    return(dem_table)
+}
+
+```
+
+```{r read files, message=FALSE, warning=FALSE, include=FALSE}
+Selected_state = "NY"
+
+#Read EIA 861 form 2017-2021-----------------------------------------------------------------------------
+Rates17_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2017_rates.csv"))
+Rates18_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2018_rates.csv"))
+Rates19_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2019_rates.csv"))
+Rates20_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2020_rates.csv"))
+Rates21_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2021_rates.csv"))
+colnames(Rates20_raw)[1]="Year"
+
+Rates_raw = rbind(Rates17_raw,Rates18_raw,Rates19_raw,Rates20_raw,Rates21_raw)%>%filter(!is.na(Year))
+
+# Read shapefile-----------------------------------------------------------------------------
+US_States_shp = sf::st_read(paste0(here::here(),"/3.Data_Input/4.shapefiles/cb_2018_us_state_500k/cb_2018_us_state_500k.shp"))
+
+# Read ACS and DAC-----------------------------------------------------------------------------
+ACS2019tract_raw = read.csv(paste0(here::here(),"/3.Data_Input/6.census/ACS2019_tract.csv"))
+ACS2019_NY_Muni_race = read.csv(paste0(here::here(),"/3.Data_Input/6.census/ACS2019_NY_Muni_race.csv"))
+ACS2019_place_CA_NY_AL = read.csv(paste0(here::here(),"/3.Data_Input/6.census/ACS2019_place_CA_NY_AL.csv"))
+
+# Utility tract level demographics by state--------------------------------------------------------------------------------------
+CA = read.csv(paste0(here::here(),"/5.Code/Utility_demogrpahics/CA_utility_demographics.csv"))%>%select(-X)
+AL = read.csv(paste0(here::here(),"/5.Code/Utility_demogrpahics/AL_utility_demographics.csv"))%>%select(-X)
+NY = read.csv(paste0(here::here(),"/5.Code/Utility_demogrpahics/NY_utility_demographics.csv"))%>%select(-X)
+
+```
+ 
+```{r clean rates and ACS2019 data, include=FALSE, message=FALSE, warning=FALSE}
+ACS2019tract = ACS2019tract_raw%>%
+                  mutate(
+                       BIPOC = pop_tot-pop_non_hispanic_White
+                      ,Black = pop_non_hispanic_Black + pop_hispanic_Black
+                      ,Hispanic = pop_hispanic
+                      ,Occupied_housing_units = Renter_occupied_housing_units
+                                                + owner_occupied_housing_units
+                      ,Housing_burdened = Renter_occupied_housing_units_30_49
+                                                      + owner_occupied_housing_units_30_49
+                                                      + Renter_occupied_housing_units_over50
+                                                      + owner_occupied_housing_units_over50
+                      )%>%
+                      select(State,FIPS,pop_tot,BIPOC,Black,Hispanic
+                             ,median_household_income
+                             ,Occupied_housing_units
+                             ,Housing_burdened
+                             ,pop_18_64,pop_18_64_poverty)%>%
+                      rename(GEOID = FIPS)%>%
+                      mutate(GEOID=as.character(GEOID))
+
+
+# Clean ACS for NY Municipalities---------------------------------------------------------------------------------------
+ACS2019_NY_Muni = ACS2019_NY_Muni_race%>%
+                  rename(GEOID = Geographic.Identifier)%>%
+                  mutate(City =Area.Name )%>%
+                  mutate(City = str_replace_all(City, " CDP", "") )%>%
+                  mutate(City = str_replace_all(City, " village", "") )%>%
+                  mutate(City = str_replace_all(City, " city", "") )%>%
+                  mutate(City = str_replace_all(City, " Center", "") )%>%
+                  mutate(City = str_replace_all(City, " City", "") )%>%
+                  mutate(City = str_replace_all(City, " Village", "") )%>%
+                  mutate(City = str_replace_all(City, " town", "") )%>%
+                  mutate(City = str_replace_all(City, " Town", "") )%>%
+                  rename(muni_tot_pop = Total.Population)%>%
+                  mutate(muni_tot_BIPOC = muni_tot_pop - Total.Population..Not.Hispanic.or.Latino..White.Alone)%>%
+                  mutate(muni_BIPOC = round(muni_tot_BIPOC/muni_tot_pop*100,1))%>%
+                  select(GEOID,City, muni_tot_pop,muni_tot_BIPOC, muni_BIPOC)
+
+ACS2019_NY_Muni_rooms = ACS2019_place_CA_NY_AL%>%filter(State.Postal.Abbreviation=="ny")%>%
+                        mutate(GEOID = Geographic.Identifier
+                               ,City = FIPS)%>%
+                        mutate(Renters = round(Occupied.Housing.Units..Renter.Occupied/Occupied.Housing.Units.*100,3))%>%
+                        select(GEOID
+                               ,Renters
+                               ,Median.Number.Of.Rooms
+                               ,Median.Value..Dollars. )
+
+ACS2019_NY_Muni = left_join(ACS2019_NY_Muni,ACS2019_NY_Muni_rooms,by=("GEOID"))
+
+#rate data-----------------------------------------------------------------------------------------------------------
+Rates_clean = Rates_raw%>%
+              mutate( Revenues_Thousand_Dollars=as.numeric(gsub(",","",Revenues_Thousand_Dollars), na.rm=NULL)
+                     ,Sales_Megawatthours= as.numeric(gsub(",","",Sales_Megawatthours), na.rm=NULL)
+                     ,Customers_Count = as.numeric(gsub(",","",Customers_Count), na.rm=NULL)) %>%
+  
+              filter(!is.na(Revenues_Thousand_Dollars))%>%
+              filter(Revenues_Thousand_Dollars!=0)%>%
+  
+              mutate(Revenue_dollars=Revenues_Thousand_Dollars*1000
+                     ,Sales_kilowatthours = Sales_Megawatthours*1000
+                     ,Price=round(Revenue_dollars/Sales_kilowatthours,3)
+                     ,Rev_per_cos = round(Revenue_dollars/Customers_Count,3)
+                     ,KWH_per_cos = round(Sales_kilowatthours/Customers_Count,3)
+                     )
+               
+Rates_Bundled = Rates_clean%>%filter(Service_Type=="Bundled" & Utility_Name!="Adjustment 2017" & Utility_Name!="Adjustment 2018"& Utility_Name!="Adjustment 2019"& Utility_Name!="Adjustment 2020"& Utility_Name!="Adjustment 2021"&Ownership!="Behind the Meter")
+Rates = Rates_Bundled %>% filter(State%in%c("AL","NY","CA") )
+
+Rates_Bundled_allyears=Rates_Bundled
+# Rates_Bundled=Rates_Bundled_allyears%>%filter(Year==baseline_year)
+
+Rates_allyears=Rates
+# Rates=Rates_allyears%>%filter(Year==baseline_year)
+
+#clean state shapefile -----------------------------------------------------------------------
+US_Cont_States_shp = US_States_shp %>%
+  filter(NAME!="Alaska" & NAME!="American Samoa"& NAME!="United States Virgin Islands"& NAME!="Commonwealth of the Northern Mariana Islands"& NAME!="Guam"& NAME!="Hawaii"& NAME!= "Puerto Rico")%>%
+  rename(State=STUSPS)%>%
+  select(State,geometry)
+```
+
+```{r New York join rate and demogrpahic data, include=FALSE, message=FALSE, warning=FALSE}
+Selected_state="NY"
+if(Selected_state=="NY"){
+#get the state %BIPOC for 2019
+state_BIPOC_share = ACS2019tract%>%filter(State==tolower(Selected_state))%>%
+                      summarise(share_BIPOC = round(sum(BIPOC)/sum(pop_tot)*100,3))%>%
+                      pull(share_BIPOC)
+
+# Add columns to help count utilities by type
+State_rates = Rates_allyears %>%
+                filter(State==Selected_state)%>%
+                select(State,Year,Utility_Name,Customers_Count,Ownership,Price,Rev_per_cos,KWH_per_cos)%>%
+                rename(State_abr = State)%>%
+                          mutate(
+                            IOU = if_else(Ownership=="Investor Owned",1,0)
+                            ,Municipal = if_else(Ownership=="Municipal",1,0)
+                            ,Cooperative = if_else(Ownership=="Cooperative",1,0)
+                            ,State = if_else(Ownership=="State",1,0)
+                            ,Political_Subdivision =if_else(Ownership=="Political Subdivision",1,0)
+                          )
+
+# step 1: Clean city names so that municipalities can be correctly joined------------------------
+State_rates_NY_Muni = State_rates%>%
+                  mutate(City =Utility_Name )%>%
+                  mutate(City = if_else(Ownership%in%c("Investor Owned","State"),"NA",City))%>%
+                  mutate(City = str_replace_all(City, "Village of ", "") )%>%
+                  mutate(City = str_replace_all(City, "	Town of ", "") ) %>%
+                  mutate(City = str_replace_all(City, "Town of ", "") ) %>%
+                  mutate(City = str_replace_all(City, "City of ", "") ) %>%
+                  mutate(City = if_else(grepl("NY",City),word(City, 1),City) )%>%
+                  mutate(City = if_else(grepl("Lake Placid",Utility_Name),"Lake Placid",City))%>%
+                  mutate(City = if_else(grepl("Mohawk",City),"Mohawk",City))%>%
+                  mutate(City = if_else(grepl("Jamestown",City),"Jamestown",City))%>%
+                  mutate(City = if_else(grepl("North Shore",City),"North Shore",City))%>%
+                  mutate(City = if_else(grepl("Steuben",City),"Steuben",City))%>%
+                  mutate(City = if_else(grepl("Bath",City),"Bath",City))%>%
+                  mutate(City = if_else(grepl("Delaware",City),"Delaware",City))%>%
+                  mutate(City = if_else(grepl("Otsego",City),"Otsego",City))%>%
+                  mutate(City = if_else(grepl("Rouses",City),"Rouses Point",City))%>%
+                  mutate(City = if_else(grepl("Green Island",Utility_Name),"Green Island",City))%>%
+                  mutate(City = if_else(grepl("Little Valley",Utility_Name),"Little Valley",City))%>%
+                  mutate(City = if_else(grepl("Penn Yan",Utility_Name),"Penn Yan",City))%>%
+                  mutate(City = if_else(grepl("Silver Springs",Utility_Name),"Silver Springs",City))%>%
+                  mutate(City = if_else(grepl("Tupper Lake",Utility_Name),"Tupper Lake",City))%>%
+                  mutate(City = if_else(grepl("Watkins Glen",Utility_Name),"Watkins Glen",City))%>%
+                  mutate(City = if_else(grepl("Rockville",Utility_Name),"Rockville Centre",City))%>%
+                  mutate(Utility_Name = if_else(Utility_Name=="Niagara Mohawk Power Corp.","National Grid", Utility_Name))%>%
+                  mutate(Utility_Name_new = if_else(City=="NA",Utility_Name,City))%>%
+                  mutate(Utility_Name_new=tolower(Utility_Name_new))
+
+# step 2 join with the demographics of electric utilites-----------------------------------------------------
+
+NY = NY%>%
+          mutate( City = if_else(grepl("Municipal ",Utility),Utility,"NA"))%>%
+          mutate(City = str_replace_all(City, "Municipal Utility: ", "") )%>%
+
+          mutate(Utility_Name_new = if_else(City=="NA",Utility_Name,City))%>%
+          mutate(Utility_Name_new=tolower(Utility_Name_new))%>%
+          select(-Utility_Name,-City)
+
+State_rates_dem = left_join(State_rates_NY_Muni
+                        ,eval(as.symbol(Selected_state))
+                        ,by="Utility_Name_new" )
+  
+ # State_rates%>% select(Utility_Name_new,Utility,census_tracts,Year)%>%filter(is.na(census_tracts))
+# NY Utilitie sexcluded from the analysis: fishers island utility co inc,north shore,pennsylvania electric co	,steuben,castile,delaware,otsego
+
+# Step 3: assign BIPOC category and remove utilities where there is insufficient information
+State_rates_dem_all = State_rates_dem%>%
+    mutate(BIPOC50=if_else(BIPOC_p>50,"% BIPOC>50","% BIPOC<50"))
+
+# Step 4: Remove utilities that do not have correlated demographics
+State_rates_dem = State_rates_dem_all%>%filter(Total_population!=0 & !is.na(Total_population))
+}
+NY_rates_dem = State_rates_dem
+```
+
+
+```{r California join rate and demogrpahic data, include=FALSE, message=FALSE, warning=FALSE}
+Selected_state = "CA"
+if(Selected_state=="CA"){
+#get the state %BIPOC for 2019
+state_BIPOC_share = ACS2019tract%>%filter(State==tolower(Selected_state))%>%
+                      summarise(share_BIPOC = round(sum(BIPOC)/sum(pop_tot)*100,3))%>%
+                      pull(share_BIPOC)
+
+# Add columns to help count utilities by type
+State_rates = Rates_allyears %>%
+                filter(State==Selected_state)%>%
+                select(State,Year,Utility_Name,Customers_Count,Ownership,Price,Rev_per_cos,KWH_per_cos)%>%
+                 rename(State_abr = State)%>%
+                          mutate(
+                            IOU = if_else(Ownership=="Investor Owned",1,0)
+                            ,Municipal = if_else(Ownership=="Municipal",1,0)
+                            ,Cooperative = if_else(Ownership=="Cooperative",1,0)
+                            ,State = if_else(Ownership=="State",1,0)
+                            ,Political_Subdivision =if_else(Ownership=="Political Subdivision",1,0)
+                            ,Utility_Name_new = Utility_Name
+                          )
+
+# step 1: Clean city names so that municipalities can be correctly joined------------------------
+State_rates = State_rates%>%
+  mutate(Utility_Name_new = case_when(
+    Utility_Name=="City of Alameda" ~ "Alameda Municipal Power"
+    ,TRUE ~ Utility_Name
+  ))
+
+CA = CA%>%mutate(
+  Utility_Name_new = case_when(
+    Utility_Name == "Anza Electric Cooperative, Inc." ~ "Anza Electric Coop Inc"
+    ,Utility_Name == "City of Banning Electric Department" ~ "City of Banning - (CA)"
+    ,Utility_Name == "City of Healdsburg Electric Department" ~ "City of Healdsburg - (CA)"
+    ,Utility_Name == "City of Lompoc Electric Division" ~ "City of Lompoc - (CA)"
+    ,Utility_Name == "City of Needles" ~ "City of Needles - (CA)"
+    ,Utility_Name == "City of Shasta Lake" ~ "City of Shasta Lake - (CA)"
+    ,Utility_Name == "City of Ukiah Electric Utilities Division" ~ "City of Ukiah - (CA)"
+    ,Utility_Name == "Plumas-Sierra Rural Electric Cooperative" ~ "Plumas-Sierra Rural Elec Coop"
+    ,Utility_Name == "Truckee Donner Public Utilities District" ~ "Truckee Donner P U D"
+    ,Utility_Name == "Trinity Public Utilities District" ~ "Trinity Public Utilities Dist"
+    ,TRUE ~ Utility_Name
+  ))
+
+# step 2 join with the demographics of electric utilities-----------------------------------------------------
+State_rates_dem = left_join(State_rates
+                        ,eval(as.symbol(Selected_state))
+                        ,by="Utility_Name_new" )
+  
+
+# Step 3: assign BIPOC category and remove utilities where there is insufficient information
+State_rates_dem_all = State_rates_dem%>%
+    mutate(BIPOC50=if_else(BIPOC_p>50,"% BIPOC>50","% BIPOC<50"))
+
+# Step 4: Remove utilities that do not have correlated demographics
+State_rates_dem_all = State_rates_dem_all %>%mutate(Ownership=if_else(Ownership=="Political Subdivision","Municipal",Ownership))
+
+State_rates_dem = State_rates_dem_all%>%filter(Total_population!=0 & !is.na(Total_population))
+}
+
+
+CA_rates_dem = State_rates_dem
+```
+
+```{r Alabama, include=FALSE, message=FALSE, warning=FALSE}
+Selected_state="AL"
+if(Selected_state=="AL"){
+#get the state %BIPOC for 2019
+state_BIPOC_share = ACS2019tract%>%filter(State==tolower(Selected_state))%>%
+                      summarise(share_BIPOC = round(sum(BIPOC)/sum(pop_tot)*100,3))%>%
+                      pull(share_BIPOC)
+
+# Add columns to help count utilities by type
+State_rates = Rates_allyears %>%
+                filter(State==Selected_state)%>%
+                mutate(Utility_Name=tolower(Utility_Name))%>%
+                select(State,Year,Utility_Name,Customers_Count,Ownership,Price,Rev_per_cos,KWH_per_cos)%>%
+                rename(State_abr = State)%>%
+                          mutate(
+                            IOU = if_else(Ownership=="Investor Owned",1,0)
+                            ,Municipal = if_else(Ownership=="Municipal",1,0)
+                            ,Cooperative = if_else(Ownership=="Cooperative",1,0)
+                            ,State = if_else(Ownership=="State",1,0)
+                            ,Political_Subdivision =if_else(Ownership=="Political Subdivision",1,0)
+
+                          )
+State_rates
+# step 1: Clean city names so that municipalities can be correctly joined------------------------
+AL=AL%>%
+  rename(Utility_Name=Dataset)%>%
+  mutate(Utility_Name=tolower(Utility_Name))
+
+# step 2 join with the demographics of electric utilities-----------------------------------------------------
+State_rates_dem = left_join(State_rates
+                        ,eval(as.symbol(Selected_state))
+                        ,by="Utility_Name" )%>%
+                  rename(Utility_Name_new = Utility_Name)
+                        
+# Step 3: assign BIPOC category and remove utilities where there is insufficient information
+State_rates_dem_all = State_rates_dem%>%
+    mutate(BIPOC50=if_else(BIPOC_p>50,"% BIPOC>50","% BIPOC<50"))
+
+# Step 4: Remove utilities that do not have correlated demographics
+State_rates_dem = State_rates_dem_all%>%filter(Total_population!=0 & !is.na(Total_population))
+}
+
+AL_rates_dem = State_rates_dem
+```
+
+```{r linear reg message=FALSE, warning=FALSE}
+CA_rates_dem = CA_rates_dem%>%mutate(
+  Ownership = factor(Ownership, levels= c("Municipal","Investor Owned","Cooperative"  ) )
+  ,BIPOC50 = factor(BIPOC50, levels= c("% BIPOC<50" ,"% BIPOC>50" )))
+
+AL_rates_dem= AL_rates_dem%>%mutate(
+  Ownership = factor(Ownership, levels= c("Municipal","Investor Owned","Cooperative" ) )
+  ,BIPOC50 = factor(BIPOC50, levels= c("% BIPOC<50" ,"% BIPOC>50" )))
+
+NY_rates_dem= NY_rates_dem%>%mutate(
+  Ownership = factor(Ownership, levels= c("Municipal","Investor Owned","Cooperative" ) )
+  ,BIPOC50 = factor(BIPOC50, levels= c("% BIPOC<50" ,"% BIPOC>50" )))
+
+```
+
+```{r t test message=FALSE, warning=FALSE}
+t.test.price.state = function(dat,state,ownership_type){
+
+      t.test.price  = t.test(Price ~ BIPOC50, data = dat%>%filter(Ownership==ownership_type))
+
+      t = data.frame(State = state
+                  ,Ownership= ownership_type
+                  ,BIPOC = round(t.test.price$estimate[[2]],3)
+                  ,White = round(t.test.price$estimate[[1]],3)
+                  ,P.Value = round(t.test.price$p.value,3)
+                 )%>%mutate(Difference= BIPOC-White)
+
+      #add significance mark
+     if (t$P.Value<0.001){t$Difference = paste0(as.character(t$Difference),"***")} else if(
+         between(t$P.Value,0.001,0.01)) {t$Difference = paste0(as.character(t$Difference),"**")}else if(
+         between(t$P.Value,0.01,0.05)) {t$Difference = paste0(as.character(t$Difference),"**")}else if(
+         between(t$P.Value,0.05,0.1)) {t$Difference = paste0(as.character(t$Difference),".")}else{
+
+           t$Difference = as.character(t$Difference)}
+
+      return(t)
+      }
+
+t.test.price.table = rbind(
+        t.test.price.state(AL_rates_dem,"AL","Municipal")
+        # ,t.test.price.state(AL_rates_dem,"AL","Cooperative")
+        ,t.test.price.state(CA_rates_dem,"CA","Investor Owned")
+        ,t.test.price.state(CA_rates_dem,"CA","Municipal")
+        ,t.test.price.state(NY_rates_dem,"NY","Investor Owned")
+        ,t.test.price.state(NY_rates_dem,"NY","Municipal")
+      )
+
+
+write.csv(t.test.price.table,"t.test.price.table.csv")
+
+
+
+t.test.price.table2019 = rbind(
+        t.test.price.state(AL_rates_dem %>%filter(Year==2019),"AL","Municipal")
+        ,t.test.price.state(AL_rates_dem%>%filter(Year==2019),"AL","Cooperative")
+        ,t.test.price.state(CA_rates_dem%>%filter(Year==2019),"CA","Investor Owned")
+        ,t.test.price.state(CA_rates_dem%>%filter(Year==2019),"CA","Municipal")
+        # ,t.test.price.state(NY_rates_dem%>%filter(Year==2019),"NY","Investor Owned")
+        # ,t.test.price.state(NY_rates_dem%>%filter(Year==2019),"NY","Municipal")
+      )
+
+
+write.csv(t.test.price.table2019,"t.test.price.table2019.csv")
+```
+
+```{r t test all, message=FALSE, warning=FALSE}
+t.test.metric.state = function(dat,state,ownership_type,metric){
+
+      t.test.price  = t.test(eval(as.symbol(metric)) ~ BIPOC50, data = dat%>%filter(Ownership==ownership_type))
+
+      t = data.frame(State = state
+                  ,Ownership= ownership_type
+                  ,BIPOC = round(t.test.price$estimate[[2]],3)
+                  ,White = round(t.test.price$estimate[[1]],3)
+                  ,P.Value = round(t.test.price$p.value,3)
+                 )%>%mutate(Difference= round(BIPOC-White,3))
+
+      #add significance mark
+     if (t$P.Value<0.001){t$Difference = paste0(as.character(t$Difference),"***")} else if(
+         between(t$P.Value,0.001,0.01)) {t$Difference = paste0(as.character(t$Difference),"**")}else if(
+         between(t$P.Value,0.01,0.05)) {t$Difference = paste0(as.character(t$Difference),"**")}else if(
+         between(t$P.Value,0.05,0.1)) {t$Difference = paste0(as.character(t$Difference),".")}else{
+
+           t$Difference = as.character(t$Difference)}
+
+      return(t)
+      }
+
+
+
+
+t.test.price.table = rbind(
+        t.test.metric.state(AL_rates_dem,"AL","Municipal","Price")
+        ,t.test.metric.state(AL_rates_dem,"AL","Cooperative","Price")
+        ,t.test.metric.state(CA_rates_dem,"CA","Investor Owned","Price")
+        ,t.test.metric.state(CA_rates_dem,"CA","Municipal","Price")
+        # ,t.test.metric.state(NY_rates_dem,"NY","Investor Owned","Price")
+        ,t.test.metric.state(NY_rates_dem,"NY","Municipal","Price")
+      )
+
+t.test.bill.table = rbind(
+        t.test.metric.state(AL_rates_dem,"AL","Municipal","Rev_per_cos")
+        ,t.test.metric.state(AL_rates_dem,"AL","Cooperative","Rev_per_cos")
+        ,t.test.metric.state(CA_rates_dem,"CA","Investor Owned","Rev_per_cos")
+        ,t.test.metric.state(CA_rates_dem,"CA","Municipal","Rev_per_cos")
+        ,t.test.metric.state(NY_rates_dem,"NY","Investor Owned","Rev_per_cos")
+        ,t.test.metric.state(NY_rates_dem,"NY","Municipal","Rev_per_cos")
+      )
+
+t.test.consumption.table = rbind(
+        t.test.metric.state(AL_rates_dem,"AL","Municipal","KWH_per_cos")
+        ,t.test.metric.state(AL_rates_dem,"AL","Cooperative","KWH_per_cos")
+        ,t.test.metric.state(CA_rates_dem,"CA","Investor Owned","KWH_per_cos")
+        ,t.test.metric.state(CA_rates_dem,"CA","Municipal","KWH_per_cos")
+        ,t.test.metric.state(NY_rates_dem,"NY","Investor Owned","KWH_per_cos")
+        ,t.test.metric.state(NY_rates_dem,"NY","Municipal","KWH_per_cos")
+      )
+
+write.csv(t.test.price.table,"t.test.price.table.csv")
+write.csv(t.test.consumption.table,"t.test.consumption.table.csv")
+write.csv(t.test.bill.table,"t.test.bill.table.csv")
+
+t.test.price.table2019 = rbind(
+        t.test.price.state(AL_rates_dem %>%filter(Year==2019),"AL","Municipal")
+        ,t.test.price.state(AL_rates_dem%>%filter(Year==2019),"AL","Cooperative")
+        ,t.test.price.state(CA_rates_dem%>%filter(Year==2019),"CA","Investor Owned")
+        ,t.test.price.state(CA_rates_dem%>%filter(Year==2019),"CA","Municipal")
+        # ,t.test.price.state(NY_rates_dem%>%filter(Year==2019),"NY","Investor Owned")
+        # ,t.test.price.state(NY_rates_dem%>%filter(Year==2019),"NY","Municipal")
+      )
+
+
+write.csv(t.test.price.table2019,"t.test.price.table2019.csv")
+
+
+```
+
+
+
+# `r Selected_state`
+
+## Data Subset
+
+### All electric utilities: Total number of utilities that reported to the Federal government via form 861 by type between 2017-2021
+```{r New York data subset, echo=FALSE, message=FALSE, warning=FALSE}
+type_year_n =State_rates%>%group_by(Ownership,Year)%>%count()
+type_year_n_table = spread(type_year_n, key=Year, value=n)
+type_year_n_table = rbind(type_year_n_table,colSums(type_year_n_table[2:6],na.rm = TRUE))%>%
+  mutate(Ownership = if_else(is.na(Ownership),"Total",Ownership))
+plot_fun(type_year_n_table,doc_type)
+```
+Notice that While Investor Owned Utilities report consistently between 2017-2021, municipal utilities and COOPs report inconsistently, with the majority of those utilities reporting in 2019 and not in other years.
+
+### Inclusion in analysis
+Our analysis includes only utilities that operated in `r Selected_state` between 2017-2021, and that we were able to correlate the utility's boundary area to demographics. The list below includes the utilities included and excluded from this analysis. Some utilities were excluded because they mostly operate out of state, some because they serve too small of an area, and some because their service area was badly defined.
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+Inclusion = State_rates_dem_all%>%
+  group_by(Utility_Name_new)%>%
+  summarise(Ownership=min(Ownership),Racial_composition=min(BIPOC50))%>%
+  mutate(Include = if_else(Racial_composition==0 | is.na(Racial_composition),0,1))
+
+plot_fun(Inclusion,doc_type)
+```
+
+### Included electric Utilities: Total number of utilities that reported to the Federal government via form 861 by type between 2017-2021
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+type_year_n =State_rates_dem%>%group_by(Ownership,Year)%>%count()
+type_year_n_table = spread(type_year_n, key=Year, value=n)
+type_year_n_table = rbind(type_year_n_table,colSums(type_year_n_table[2:6],na.rm = TRUE))%>%
+  mutate(Ownership = if_else(is.na(Ownership),"Total",Ownership))
+plot_fun(type_year_n_table,doc_type)
+```
+
+### Included electric Utilities: Total number of costumers in utilities that reported to the Federal government via form 861 by type in 2019
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+Utility_type_dem = State_rates_dem%>%
+  filter(Year==2019)%>%
+  group_by(Ownership,BIPOC50)%>% 
+  summarise(Customers_Count=sum(Customers_Count,na.rm = TRUE)
+            ,BIPOC = round(sum(Total_BIPOC,na.rm = TRUE)/sum(Total_population,na.rm = TRUE)*100,1)
+            ,DAC = round(sum(J40_DAC,na.rm = TRUE)/sum(census_tracts,na.rm = TRUE)*100,1)
+            ,Housing_burdened = round(sum(Housing_burdened,na.rm = TRUE)/sum(Occupied_housing_units,na.rm = TRUE)*100,1)
+            ,renters = round(sum(renters,na.rm = TRUE)/sum(Occupied_housing_units,na.rm = TRUE)*100,1)
+            ,low_income_below_federal200 = round(sum(low_income_below_federal200,na.rm = TRUE)/sum(Total_population,na.rm = TRUE)*100,1)
+            ,mean.Median.Number.Of.Rooms = round(mean(mean.Median.Number.Of.Rooms,na.rm = TRUE),1)
+            ,mean_median_household_income = round(mean(mean_median_household_income,na.rm = TRUE),1)
+            ,mean.Median.Home.Value = round(mean(mean.Median.Home.Value,na.rm = TRUE),1)
+            ,Urbal_rural_code = round(mean(Urbal_rural_code,na.rm = TRUE),1)
+            ,PM25 = round(mean(PM25,na.rm = TRUE),1)
+            )
+
+
+plot_fun(Utility_type_dem,doc_type)
+```
+
+
+
+
+
+## Utilities' demographics 2019
+
+### Total utilities by race
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+plot_fun(State_rates_dem%>% filter(Year==2019)%>%filter(!is.na(low_income))%>%group_by(BIPOC50)%>%count()
+,doc_type)
+```
+
+### 2019 Demographics by race
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+dem = State_rates_dem%>% 
+          filter(Year==2019)%>%
+          filter(!is.na(low_income))
+
+utility_demographics_race = rbind(
+                    data.frame(Variable="Proportions",Majority_BIPOC="",Majority_White="",p.value="")
+                    
+                     ,proportion_sum(dem,"% BIPOC","Total_BIPOC","Total_population")
+                    ,proportion_sum(dem,"% J40 DAC","J40_DAC","census_tracts")
+                    ,proportion_sum(dem,"% less than high school","less_high_school","Total_population")
+                    
+                    ,proportion_sum(dem,"% Metropolitan","Metro","census_tracts")
+                    
+                    ,proportion_sum(dem,"% poverty (age 18-64)","pop_18_64_poverty","pop_18_64")
+                    ,proportion_sum(dem,"% low income (area)","low_income","Total_population")
+                    ,proportion_sum(dem,"% low income (federal)","low_income_below_federal200","Total_population")
+                    
+                    ,proportion_sum(dem,"% cost burdened households","Housing_burdened","Occupied_housing_units")
+                    ,proportion_sum(dem,"% renters","renters","Occupied_housing_units")
+                    
+                    ,data.frame(Variable="Means",Majority_BIPOC="",Majority_White="",p.value="")
+                    ,mean_sum(dem,"Urban->Rural (1->10)","Urbal_rural_code")
+                    ,mean_sum(dem,"Mean Median Home Value","mean.Median.Home.Value")
+                    ,mean_sum(dem,"Mean Median Number Of Rooms","mean.Median.Number.Of.Rooms")
+                    ,mean_sum(dem,"PM25","PM25")
+                )
+
+plot_fun(utility_demographics_race,doc_type)
+
+
+```
+
+
+
+
+
+
+
+
+## Descriptive statistics: n, price, consumption, and demographics by Utility type
+
+### Total number of utilities by type and racial composition of service area
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# number of utilities
+utility_type_summary =State_rates_dem%>% group_by(Year,Ownership,BIPOC50)%>%count()
+plot_fun(tidyr::spread(utility_type_summary, key=Year, value=n),doc_type)
+```
+
+### Average annual price by type and racial composition of service area
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Price
+utility_type_summary_Price =State_rates_dem%>% group_by(Year,Ownership,BIPOC50)%>%summarise(Price=mean(Price))
+utility_type_summary_Price_t = tidyr::spread(utility_type_summary_Price, key=Year, value=Price)
+
+urbanity = State_rates_dem%>%
+            filter(Year==2019)%>% 
+            group_by(Ownership,BIPOC50)%>%
+            summarise(Urbanity=mean(Urbal_rural_code,na.rm=TRUE)
+                      # ,mean_median_household_income = mean(mean_median_household_income,na.rm=TRUE)
+                      # ,mean.Median.Number.Of.Rooms = mean(mean.Median.Number.Of.Rooms,na.rm=TRUE)
+                      # ,mean.Median.Home.Value = mean(mean.Median.Home.Value,na.rm=TRUE)
+                      )
+
+utility_type_summary_Price_t2 = left_join(utility_type_summary_Price_t,urbanity,by=c("Ownership","BIPOC50"))
+plot_fun(utility_type_summary_Price_t2,doc_type)
+```
+
+### Average annual consumption by type and racial composition of service area
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# consumption
+utility_type_summary_Price =State_rates_dem%>% group_by(Year,Ownership,BIPOC50)%>%summarise(KWH_per_cos=mean(KWH_per_cos))
+plot_fun(tidyr::spread(utility_type_summary_Price, key=Year, value=KWH_per_cos),doc_type)
+
+```
+
+### 2019 Demographics
+```{r ,echo=FALSE, message=FALSE, warning=FALSE}
+demographics = State_rates_dem%>%
+            filter(Year==2019)%>% 
+            group_by(Ownership,BIPOC50)%>%
+            summarise(Urbanity=mean(Urbal_rural_code,na.rm=TRUE)
+                      ,mean_median_household_income = mean(mean_median_household_income,na.rm=TRUE)
+                      ,mean.Median.Number.Of.Rooms = mean(mean.Median.Number.Of.Rooms,na.rm=TRUE)
+                      ,mean.Median.Home.Value = mean(mean.Median.Home.Value,na.rm=TRUE)
+                      ,Renters_percentage = round(sum(renters,na.rm=TRUE)/sum(Occupied_housing_units,na.rm=TRUE)*100,1)
+                      ,lowincome_percentage = round(sum(low_income,na.rm=TRUE)/sum(Total_population,na.rm=TRUE)*100,1)
+                      ,Housing_burdened = round(sum(Housing_burdened,na.rm=TRUE)/sum(Occupied_housing_units,na.rm=TRUE)*100,1)
+                      )
+plot_fun(demographics,doc_type)
+```
+
+
+
+
+## Histogram: distribution of utility sevices
+```{r echo=FALSE, fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
+
+ggarrange( hist_plot(State_rates_dem,"Price","Mean Annual Price ($/kWh)",0.02)
+          ,hist_plot(State_rates_dem,"Rev_per_cos","Mean Annual Bill ($/Customer)",200)
+          ,hist_plot(State_rates_dem,"KWH_per_cos","Mean Annual Consumption (kWh/Customer)",1000)
+          
+          ,labels = c("A", "B","C" ), ncol = 3, nrow = 1)       
+```
+
+
+
+
+## Change in rates/consumption over time by race
+
+```{r timeline all, echo=FALSE, fig.height=4, fig.width=15, message=FALSE, warning=FALSE}
+state_time = State_rates_dem %>%
+                      group_by(Year, BIPOC50)%>%
+                          summarise(Count = n()
+                              ,average_price = mean(Price)
+                              ,average_rev_per_cos = mean(Rev_per_cos)
+                              ,average_KWH_per_cos = mean(KWH_per_cos))
+
+
+dat_state = State_rates_dem %>%
+                      group_by(Year)%>%
+                          summarise(Count = n()
+                              ,average_price = mean(Price)
+                              ,average_rev_per_cos = mean(Rev_per_cos)
+                              ,average_KWH_per_cos = mean(KWH_per_cos))
+
+
+Time_average_price = timeseries_graph_50(state_time,dat_state,"average_price","BIPOC50","Average annual energy price"
+                 ,"Annual energy price")
+
+Time_average_bill = timeseries_graph_50(state_time,dat_state,"average_rev_per_cos","BIPOC50","Average annual energy Bill"
+                 ,"Annual energy Bill")
+Time_average_consumption = timeseries_graph_50(state_time,dat_state,"average_KWH_per_cos","BIPOC50","Average annual energy Consumption"
+                 ,"Annual energy Consumption")
+
+mylegend<-g_legend(Time_average_bill)
+
+grid.arrange(arrangeGrob(Time_average_price + theme(legend.position="none"),
+                         Time_average_bill + theme(legend.position="none"),
+                         Time_average_consumption+ theme(legend.position="none"),
+                         nrow=1),
+             mylegend, nrow=2,heights=c(10, 1)
+             ,top=textGrob(paste(Selected_state,"Time Series: comparison between utilities serving majority BIPOC/ Majority White population")))
+
+```
+
+
+
+## Change in rates/consumption over time by race and type 
+```{r timeline IOU POU, echo=FALSE, fig.height=4, fig.width=15, message=FALSE, warning=FALSE}
+IOU_time = State_rates_dem %>%filter(Ownership=="Investor Owned")%>%
+                      group_by(Year, BIPOC50)%>%
+                          summarise(Count = n()
+                                    ,Ownership=min(Ownership)
+                              ,average_price = mean(Price)
+                              ,average_rev_per_cos = mean(Rev_per_cos)
+                              ,average_KWH_per_cos = mean(KWH_per_cos))
+
+Muni_time = State_rates_dem %>%filter(Ownership=="Municipal")%>%
+                      group_by(Year, BIPOC50)%>%
+                          summarise(Count = n()
+                                    ,Ownership=min(Ownership)
+                              ,average_price = mean(Price)
+                              ,average_rev_per_cos = mean(Rev_per_cos)
+                              ,average_KWH_per_cos = mean(KWH_per_cos))
+
+type_time = rbind(IOU_time,Muni_time)
+
+if(Selected_state=="AL"){
+      coop_time = State_rates_dem %>%filter(Ownership=="Cooperative")%>%
+                            group_by(Year, BIPOC50)%>%
+                                summarise(Count = n()
+                                          ,Ownership=min(Ownership)
+                                    ,average_price = mean(Price)
+                                    ,average_rev_per_cos = mean(Rev_per_cos)
+                                    ,average_KWH_per_cos = mean(KWH_per_cos))
+      type_time = rbind(type_time,coop_time)
+      }
+
+type_time = type_time %>%
+                  mutate(Type = case_when(
+                    Ownership=="Investor Owned" & BIPOC50 == "% BIPOC<50" ~ "IOU serving majority White costumers"
+                    ,Ownership=="Investor Owned" & BIPOC50 == "% BIPOC>50" ~ "IOU serving majority BIPOC costumers"
+                    ,Ownership=="Municipal" & BIPOC50 == "% BIPOC<50" ~ "POU serving majority White costumers"
+                    ,Ownership=="Municipal" & BIPOC50 == "% BIPOC>50" ~ "POU serving majority BIPOC costumers"
+                  ))
+
+if(Selected_state=="AL"){type_time = type_time %>%
+                  mutate(Type = case_when(
+                    Ownership=="Cooperative" & BIPOC50 == "% BIPOC<50" ~ "Cooperative serving majority White costumers"
+                    ,Ownership=="Cooperative" & BIPOC50 == "% BIPOC>50" ~ "Cooperative serving majority BIPOC costumers"
+                    ,.default = Type
+                  ))
+              }
+
+type_time = rbind(type_time,
+       data.frame(
+                  "Year"=2017               
+                  ,"BIPOC50" = "% BIPOC<50"      
+                  ,"Count"=1
+                  ,"Ownership"= "Investor Owned"
+                  ,"average_price" = 0.145
+                  ,"average_rev_per_cos" = 2000
+                  ,"average_KWH_per_cos" = 15000
+                  ,"Type" = "IOU serving majority BIPOC costumers"
+                ))
+
+type_time = type_time%>%mutate( Type=factor(Type
+                                ,levels =c("IOU serving majority BIPOC costumers"
+                                           ,"IOU serving majority White costumers"
+                                           ,"POU serving majority BIPOC costumers"
+                                           ,"POU serving majority White costumers"
+                                           ,"Cooperative serving majority BIPOC costumers"
+                                           ,"Cooperative serving majority White costumers") 
+                                          ))
+# levels(type_time$Type) = c("IOU serving majority BIPOC costumers","IOU serving majority White costumers","POU serving majority BIPOC costumers","POU serving majority White costumers","Cooperative serving majority BIPOC costumers","Cooperative serving majority White costumers")
+
+
+IOU_Muni_Time_average_price = IOU_Muni_timeline(type_time,"average_price", "Average Annual Price" , "Average Annual Price by Utility Type and Race")
+IOU_Muni_Time_average_bill = IOU_Muni_timeline(type_time,"average_rev_per_cos", "Average Annual Energy Bill" , "Average Annual Energy Bill by Utility Type and Race")
+IOU_Muni_Time_average_consumption = IOU_Muni_timeline(type_time,"average_KWH_per_cos", "Average Annual Consumption" , "Average Annual Consumption by Utility Type and Race")
+
+mylegend<-g_legend(IOU_Muni_Time_average_price)
+
+grid.arrange(arrangeGrob(IOU_Muni_Time_average_price + theme(legend.position="none"),
+                         IOU_Muni_Time_average_bill + theme(legend.position="none"),
+                         IOU_Muni_Time_average_consumption+ theme(legend.position="none"),
+                         nrow=1),
+             mylegend, nrow=2,heights=c(70, 40)
+             ,top=textGrob(paste(Selected_state)))
+
+
+
+```
+
+```{r timeline IOU POU plot to csv, echo=FALSE, fig.height=4, fig.width=7, message=FALSE, warning=FALSE}
+IOU_Muni_Time_average_price
+ggsave(paste0("Rates/",Selected_state,"_","IOU_Muni_Time_average_price",".jpg"))
+
+IOU_Muni_Time_average_bill
+ggsave(paste0("Rates/",Selected_state,"_","IOU_Muni_Time_average_bill",".jpg"))
+
+
+IOU_Muni_Time_average_consumption
+ggsave(paste0("Rates/",Selected_state,"_","IOU_Muni_Time_average_consumption",".jpg"))
+
+
+
+
+# dat = type_time
+# v = "average_price"
+# y_title = "Average Annual Price" 
+# title ="Average Annual Price by Utility Type and Race"
+# 
+# ggplot(dat, aes(x=Year, y=eval(as.symbol(v)), colour=Type))+
+#             geom_point(size=3, aes(shape = Type)) +
+#             geom_line(size=1)+
+#             scale_colour_manual(values= c("IOU serving majority White costumers"="#016F94"
+#                                          ,"POU serving majority White costumers"="#48BAE0"
+#                                          ,"Cooperative serving majority White costumers"="#9BD4E0"
+#                                          
+#                                          ,"IOU serving majority BIPOC costumers"="#944B00"
+#                                          ,"POU serving majority BIPOC costumers"="#E07E19"
+#                                          ,"Cooperative serving majority BIPOC costumers"="#BA906C"
+#                                          )) +
+#             labs( y= y_title,x = "Year")+
+#             ggtitle(title)+
+#             # theme(legend.position="bottom")+
+#             guides(color = guide_legend(title = ""))
+
+
+
+```
+
+
+
+
+## Affordibility analysis
+
+### All utilitites
+```{r, echo=FALSE, fig.height=4, fig.width=15, message=FALSE, warning=FALSE}
+# federal poverty 200%-----------------------------------------------------------------
+federal_poverty200_4prs = 55200 #2019
+federal_poverty100_4prs = 25100 #2019
+
+# Hours worked at minimum wage------------------------------------------------------------
+#source: https://ogletree.com/insights/state-by-state-minimum-wage-updates-for-2019-and-beyond/
+if(Selected_state=="AL"){State_minimum_wage = 7.25} #federal minimum wage
+if(Selected_state=="CA"){State_minimum_wage = 15}
+if(Selected_state=="NY"){State_minimum_wage = 15}
+
+# state median income------------------------------------------------------------
+#source: https://www.census.gov/quickfacts/fact/table/CA/BZA210220
+if(Selected_state=="AL"){State_medianincome = 50536} 
+if(Selected_state=="CA"){State_medianincome = 75235}
+if(Selected_state=="NY"){State_medianincome = 68486}
+
+# calculation for the time series---------------------------------------------------------
+state_time = State_rates_dem %>%
+                      group_by(Year,BIPOC50)%>%
+                          summarise(
+                              EBurden_federal200 = round(mean(Rev_per_cos)/federal_poverty200_4prs*100,2)
+                              ,EBurden_federal100 = round(mean(Rev_per_cos)/federal_poverty100_4prs*100,2)
+                              ,Hours_min_wage = round(mean(Rev_per_cos)/State_minimum_wage,3)
+                              ,EBurden_AMI = round(mean(Rev_per_cos)/State_medianincome*100,3)
+                              
+                              )
+
+dat_state = State_rates_dem %>%
+                      group_by(Year)%>%
+                          summarise(
+                              EBurden_federal200 = round(mean(Rev_per_cos)/federal_poverty200_4prs*100,2)
+                              ,EBurden_federal100 = round(mean(Rev_per_cos)/federal_poverty100_4prs*100,2)
+                              ,Hours_min_wage = round(mean(Rev_per_cos)/State_minimum_wage,3)
+                              ,EBurden_AMI = round(mean(Rev_per_cos)/State_medianincome*100,3)
+                              
+                              )
+
+
+Eburden_federal100 = timeseries_graph_50(state_time,dat_state,"EBurden_federal100","BIPOC50","Average annual energy burden"
+                 ,"Average annual energy burden by utility demographics for 4 person households at 100% FPL")
+
+EBurden_federal200 = timeseries_graph_50(state_time,dat_state,"EBurden_federal200","BIPOC50","Average annual energy burden"
+                 ,"Energy burden: 4 person households at 200% FPL")
+
+Hours_min_wage = timeseries_graph_50(state_time,dat_state,"Hours_min_wage","BIPOC50","Hours worked at minimum wage"
+                 ,"Hours worked at minimum wage to pay an average annual energy bill")
+
+EBurden_AMI = timeseries_graph_50(state_time,dat_state,"EBurden_AMI","BIPOC50","Average annual energy burden"
+                 ,"Energy burden: state median income")
+
+mylegend<-g_legend(Eburden_federal100)
+
+grid.arrange(arrangeGrob(EBurden_AMI + theme(legend.position="none"),
+                         EBurden_federal200 + theme(legend.position="none"),
+                         Hours_min_wage + theme(legend.position="none"),
+                         nrow=1),
+             mylegend, nrow=2,heights=c(10, 1)
+             ,top=textGrob(paste(Selected_state,"Time Series: comparison between utilities serving majority BIPOC/ Majority White population")))
+
+```
+
+### By type and race
+```{r affordibility timeline IOU POU, echo=FALSE, fig.height=4, fig.width=15, message=FALSE, warning=FALSE}
+IOU_time = State_rates_dem %>%filter(Ownership=="Investor Owned")%>%
+                      group_by(Year, BIPOC50)%>%
+                          summarise(
+                              EBurden_federal200 = round(mean(Rev_per_cos)/federal_poverty200_4prs*100,2)
+                              ,EBurden_federal100 = round(mean(Rev_per_cos)/federal_poverty100_4prs*100,2)
+                              ,Hours_min_wage = round(mean(Rev_per_cos)/State_minimum_wage,3)
+                              ,EBurden_AMI = round(mean(Rev_per_cos)/State_medianincome*100,3)
+                              ,Ownership=min(Ownership)
+                              )
+
+
+Muni_time = State_rates_dem %>%filter(Ownership=="Municipal")%>%
+                      group_by(Year, BIPOC50)%>%
+                          summarise(
+                              EBurden_federal200 = round(mean(Rev_per_cos)/federal_poverty200_4prs*100,2)
+                              ,EBurden_federal100 = round(mean(Rev_per_cos)/federal_poverty100_4prs*100,2)
+                              ,Hours_min_wage = round(mean(Rev_per_cos)/State_minimum_wage,3)
+                              ,EBurden_AMI = round(mean(Rev_per_cos)/State_medianincome*100,3)
+                              ,Ownership=min(Ownership)
+                              )
+
+
+type_time = rbind(IOU_time,Muni_time)
+
+if(Selected_state=="AL"){
+      coop_time = State_rates_dem %>%filter(Ownership=="Cooperative")%>%
+                            group_by(Year, BIPOC50)%>%
+                                summarise(
+                              EBurden_federal200 = round(mean(Rev_per_cos)/federal_poverty200_4prs*100,2)
+                              ,EBurden_federal100 = round(mean(Rev_per_cos)/federal_poverty100_4prs*100,2)
+                              ,Hours_min_wage = round(mean(Rev_per_cos)/State_minimum_wage,3)
+                              ,EBurden_AMI = round(mean(Rev_per_cos)/State_medianincome*100,3)
+                              ,Ownership=min(Ownership)
+                              )
+      type_time = rbind(type_time,coop_time)
+}
+
+type_time = type_time %>%
+                  mutate(Type = case_when(
+                    Ownership=="Investor Owned" & BIPOC50 == "% BIPOC<50" ~ "IOU serving majority White costumers"
+                    ,Ownership=="Investor Owned" & BIPOC50 == "% BIPOC>50" ~ "IOU serving majority BIPOC costumers"
+                    ,Ownership=="Municipal" & BIPOC50 == "% BIPOC<50" ~ "POU serving majority White costumers"
+                    ,Ownership=="Municipal" & BIPOC50 == "% BIPOC>50" ~ "POU serving majority BIPOC costumers"
+                  ))
+
+if(Selected_state=="AL"){type_time = type_time %>%
+                  mutate(Type = case_when(
+                    Ownership=="Cooperative" & BIPOC50 == "% BIPOC<50" ~ "Cooperative serving majority White costumers"
+                    ,Ownership=="Cooperative" & BIPOC50 == "% BIPOC>50" ~ "Cooperative serving majority BIPOC costumers"
+                    ,.default = Type
+                  ))
+}
+
+Eburden_federal100 = IOU_Muni_timeline(type_time,"EBurden_federal100", "Average annual energy burden" , "Energy burden for 4 person households at 100% FPL")
+EBurden_federal200 = IOU_Muni_timeline(type_time,"EBurden_federal200", "Average annual energy burden" , "Energy burden for 4 person households at 200% FPL")
+Hours_min_wage = IOU_Muni_timeline(type_time,"Hours_min_wage", "Average annual energy burden" , "Hours worked at minimum wage to pay energy bill")
+EBurden_AMI = IOU_Muni_timeline(type_time,"EBurden_AMI", "Average annual energy burden" , "Energy burden: state median income")
+
+
+mylegend<-g_legend(Eburden_federal100)
+
+grid.arrange(arrangeGrob(EBurden_AMI + theme(legend.position="none"),
+                         EBurden_federal200 + theme(legend.position="none"),
+                         Hours_min_wage + theme(legend.position="none"),
+                         nrow=1),
+             mylegend, nrow=2,heights=c(70, 40)
+             ,top=textGrob(paste(Selected_state)))
+```
+
+```{r timeline affordibility plot to csv, echo=FALSE, fig.height=4, fig.width=7, message=FALSE, warning=FALSE}
+EBurden_federal200
+ggsave(paste0("Rates/",Selected_state,"_","EBurden_federal200",".jpg"))
+
+Hours_min_wage
+ggsave(paste0("Rates/",Selected_state,"_","Hours_min_wage",".jpg"))
+
+
+EBurden_AMI
+ggsave(paste0("Rates/",Selected_state,"_","EBurden_AMI",".jpg"))
+
+```
