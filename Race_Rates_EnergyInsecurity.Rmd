@@ -212,33 +212,60 @@ mean_sum = function(dat,variable_name, v){
                     return(dem_table)
 }
 
+
+```
+```{r read files, message=FALSE, warning=FALSE, include=FALSE}
+# Selected_state = "NY"
+# 
+# #Read EIA 861 form 2017-2021-----------------------------------------------------------------------------
+# Rates17_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2017_rates.csv"))
+# Rates18_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2018_rates.csv"))
+# Rates19_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2019_rates.csv"))
+# Rates20_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2020_rates.csv"))
+# Rates21_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2021_rates.csv"))
+# colnames(Rates20_raw)[1]="Year"
+# 
+# Rates_raw = rbind(Rates17_raw,Rates18_raw,Rates19_raw,Rates20_raw,Rates21_raw)%>%filter(!is.na(Year))
+# 
+# # Read shapefile-----------------------------------------------------------------------------
+# US_States_shp = sf::st_read(paste0(here::here(),"/3.Data_Input/4.shapefiles/cb_2018_us_state_500k/cb_2018_us_state_500k.shp"))
+# 
+# # Read ACS and DAC-----------------------------------------------------------------------------
+# ACS2019tract_raw = read.csv(paste0(here::here(),"/3.Data_Input/6.census/ACS2019_tract.csv"))
+# ACS2019_NY_Muni_race = read.csv(paste0(here::here(),"/3.Data_Input/6.census/ACS2019_NY_Muni_race.csv"))
+# ACS2019_place_CA_NY_AL = read.csv(paste0(here::here(),"/3.Data_Input/6.census/ACS2019_place_CA_NY_AL.csv"))
+# 
+# # Utility tract level demographics by state--------------------------------------------------------------------------------------
+# CA = read.csv(paste0(here::here(),"/5.Code/Utility_demogrpahics/CA_utility_demographics.csv"))%>%select(-X)
+# AL = read.csv(paste0(here::here(),"/5.Code/Utility_demogrpahics/AL_utility_demographics.csv"))%>%select(-X)
+# NY = read.csv(paste0(here::here(),"/5.Code/Utility_demogrpahics/NY_utility_demographics.csv"))%>%select(-X)
+
 ```
 
 ```{r read files, message=FALSE, warning=FALSE, include=FALSE}
-Selected_state = "NY"
-
+here::here()
 #Read EIA 861 form 2017-2021-----------------------------------------------------------------------------
-Rates17_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2017_rates.csv"))
-Rates18_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2018_rates.csv"))
-Rates19_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2019_rates.csv"))
-Rates20_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2020_rates.csv"))
-Rates21_raw = read.csv(paste0(here::here(),"/3.Data_Input/1.form861/Sales_Ult_Cust_2021_rates.csv"))
+Rates17_raw = read.csv(paste0(here::here(),"/Input/Sales_Ult_Cust_2017_rates.csv"))
+Rates18_raw = read.csv(paste0(here::here(),"/Input/Sales_Ult_Cust_2018_rates.csv"))
+Rates19_raw = read.csv(paste0(here::here(),"/Input/Sales_Ult_Cust_2019_rates.csv"))
+Rates20_raw = read.csv(paste0(here::here(),"/Input/Sales_Ult_Cust_2020_rates.csv"))
+Rates21_raw = read.csv(paste0(here::here(),"/Input/Sales_Ult_Cust_2021_rates.csv"))
 colnames(Rates20_raw)[1]="Year"
 
 Rates_raw = rbind(Rates17_raw,Rates18_raw,Rates19_raw,Rates20_raw,Rates21_raw)%>%filter(!is.na(Year))
 
 # Read shapefile-----------------------------------------------------------------------------
-US_States_shp = sf::st_read(paste0(here::here(),"/3.Data_Input/4.shapefiles/cb_2018_us_state_500k/cb_2018_us_state_500k.shp"))
+US_States_shp = sf::st_read(paste0(here::here(),"/Input/cb_2018_us_state_500k/cb_2018_us_state_500k.shp"))
 
 # Read ACS and DAC-----------------------------------------------------------------------------
-ACS2019tract_raw = read.csv(paste0(here::here(),"/3.Data_Input/6.census/ACS2019_tract.csv"))
-ACS2019_NY_Muni_race = read.csv(paste0(here::here(),"/3.Data_Input/6.census/ACS2019_NY_Muni_race.csv"))
-ACS2019_place_CA_NY_AL = read.csv(paste0(here::here(),"/3.Data_Input/6.census/ACS2019_place_CA_NY_AL.csv"))
+ACS2019tract_raw = read.csv(paste0(here::here(),"/Input/ACS2019_tract.csv"))
+ACS2019_NY_Muni_race = read.csv(paste0(here::here(),"/Input/ACS2019_NY_Muni_race.csv"))
+ACS2019_place_CA_NY_AL = read.csv(paste0(here::here(),"/Input/ACS2019_place_CA_NY_AL.csv"))
 
 # Utility tract level demographics by state--------------------------------------------------------------------------------------
-CA = read.csv(paste0(here::here(),"/5.Code/Utility_demogrpahics/CA_utility_demographics.csv"))%>%select(-X)
-AL = read.csv(paste0(here::here(),"/5.Code/Utility_demogrpahics/AL_utility_demographics.csv"))%>%select(-X)
-NY = read.csv(paste0(here::here(),"/5.Code/Utility_demogrpahics/NY_utility_demographics.csv"))%>%select(-X)
+CA = read.csv(paste0(here::here(),"/Input/CA_utility_demographics.csv"))%>%select(-X)
+AL = read.csv(paste0(here::here(),"/Input/AL_utility_demographics.csv"))%>%select(-X)
+NY = read.csv(paste0(here::here(),"/Input/NY_utility_demographics.csv"))%>%select(-X)
 
 ```
  
@@ -572,7 +599,6 @@ t.test.price.table2019 = rbind(
         # ,t.test.price.state(NY_rates_dem%>%filter(Year==2019),"NY","Municipal")
       )
 
-
 write.csv(t.test.price.table2019,"t.test.price.table2019.csv")
 ```
 
@@ -654,8 +680,14 @@ write.csv(t.test.price.table2019,"t.test.price.table2019.csv")
 
 ## Data Subset
 
+Make sure to change the value of the selected state to generate the state spesific analysis below
+Selected_state = "CA" or "NY" or "AL"
+```{r select state, echo=FALSE, message=FALSE, warning=FALSE}
+Selected_state = "CA"
+```
+
 ### All electric utilities: Total number of utilities that reported to the Federal government via form 861 by type between 2017-2021
-```{r New York data subset, echo=FALSE, message=FALSE, warning=FALSE}
+```{r data subset, echo=FALSE, message=FALSE, warning=FALSE}
 type_year_n =State_rates%>%group_by(Ownership,Year)%>%count()
 type_year_n_table = spread(type_year_n, key=Year, value=n)
 type_year_n_table = rbind(type_year_n_table,colSums(type_year_n_table[2:6],na.rm = TRUE))%>%
